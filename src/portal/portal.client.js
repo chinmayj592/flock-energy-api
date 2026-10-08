@@ -40,36 +40,27 @@ async function portalGet(path, params = {}) {
   return response.data;
 }
 
-function buildMeterListUrl(page, search) {
-  const params = {};
-  if (page && page > 1) params.page = page;
-  if (search) params.q = search;
-  return { path: '/portal/meters/search', params };
-}
-
-function buildMeterDetailUrl(meterId) {
-  return { path: `/portal/meters/${meterId}`, params: {} };
-}
-
-function buildTransformerListUrl(page) {
-  const params = {};
-  if (page && page > 1) params.page = page;
-  return { path: '/portal/transformers', params };
-}
-
+// OBSERVED: GET /portal/meters/search?q=&page=
+// Returns JSON: { data: [...], total, page, pageSize }
 async function fetchMeterList(page = 1, search = null) {
-  const { path, params } = buildMeterListUrl(page, search);
-  return portalGet(path, params);
+  return portalGet('/portal/meters/search', { q: search || '', page });
 }
 
-async function fetchMeterDetail(meterId) {
-  const { path, params } = buildMeterDetailUrl(meterId);
-  return portalGet(path, params);
+// OBSERVED: GET /portal/meters/:meterId/geo
+// Returns JSON: { data: { latitude: string, longitude: string } }
+async function fetchMeterGeo(meterId) {
+  return portalGet(`/portal/meters/${meterId}/geo`);
 }
 
+// OBSERVED: GET /portal/meters/:meterId/energy
+// Returns JSON array of { timestamp, kwh, kvah, voltR } — all strings
+async function fetchMeterEnergy(meterId) {
+  return portalGet(`/portal/meters/${meterId}/energy`);
+}
+
+// OBSERVED: transformer list at /portal/dts?page=1 (seen in DevTools as 'dts?page=1')
 async function fetchTransformerList(page = 1) {
-  const { path, params } = buildTransformerListUrl(page);
-  return portalGet(path, params);
+  return portalGet('/portal/dts', { page });
 }
 
 async function makeRequest(path, params, cookie) {
@@ -78,16 +69,12 @@ async function makeRequest(path, params, cookie) {
     timeout: config.portal.timeoutMs,
     headers: { Cookie: cookie },
     validateStatus: () => true,
-    responseType: 'text',
+    responseType: 'json',
   });
 }
 
 function portalUnavailableError(cause) {
-  return createOperationalError(
-    502,
-    'PORTAL_UNAVAILABLE',
-    `Portal unavailable: ${cause.message}`
-  );
+  return createOperationalError(502, 'PORTAL_UNAVAILABLE', `Portal unavailable: ${cause.message}`);
 }
 
 function createOperationalError(statusCode, code, message) {
@@ -99,4 +86,4 @@ function createOperationalError(statusCode, code, message) {
   return err;
 }
 
-module.exports = { fetchMeterList, fetchMeterDetail, fetchTransformerList };
+module.exports = { fetchMeterList, fetchMeterGeo, fetchMeterEnergy, fetchTransformerList };

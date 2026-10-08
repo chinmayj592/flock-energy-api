@@ -7,6 +7,7 @@ const router = Router();
 
 router.get('/', controller.listMeters);
 router.get('/:meterId', controller.getMeterDetail);
+router.get('/:meterId/location', controller.getMeterLocation);
 router.get('/:meterId/consumption', controller.getMeterConsumption);
 
 module.exports = router;

@@ -1,10 +1,11 @@
 'use strict';
 
 const axios = require('axios');
+
 const config = require('../config/env');
 
 const SESSION_COOKIE_NAME = '__Secure-better-auth.session_token';
-const LOGIN_PATH = '/api/auth/sign-in/email';
+const LOGIN_PATH = '/login';
 
 let sessionCookie = null;
 
@@ -15,11 +16,17 @@ async function login() {
   try {
     response = await axios.post(
       url,
-      { email: config.portal.email, password: config.portal.password },
+      new URLSearchParams({ email: config.portal.email, password: config.portal.password }).toString(),
       {
         timeout: config.portal.timeoutMs,
         validateStatus: (status) => status < 500,
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'application/json',
+          'x-sveltekit-action': 'true',
+          'Origin': config.portal.baseUrl,
+          'Referer': `${config.portal.baseUrl}/login`,
+        },
       }
     );
   } catch (err) {

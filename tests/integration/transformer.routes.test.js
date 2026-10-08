@@ -6,41 +6,26 @@ const app = require('../../src/app');
 jest.mock('../../src/portal/portal.client');
 const portalClient = require('../../src/portal/portal.client');
 
-// ---------------------------------------------------------------------------
-// Fixtures
-// ---------------------------------------------------------------------------
+const TRANSFORMER_LIST_JSON = {
+  data: [
+    { transformerId: 'DT-001', name: 'Malviya Nagar DT 1', feeder: 'F-001', capacityKva: '100' },
+    { transformerId: 'DT-002', name: 'Malviya Nagar DT 2', feeder: 'F-001', capacityKva: '200' },
+  ],
+  total: 40,
+  page: 1,
+  pageSize: 20,
+};
 
-const TRANSFORMER_LIST_HTML = `
-  <html><body>
-    <table>
-      <thead><tr><th>Code</th><th>Name</th><th>Feeder</th><th>Capacity</th></tr></thead>
-      <tbody>
-        <tr><td>DT-001</td><td>Malviya Nagar DT 1</td><td>F-001</td><td>100 kVA</td></tr>
-        <tr><td>DT-002</td><td>Malviya Nagar DT 2</td><td>F-001</td><td>200 kVA</td></tr>
-      </tbody>
-    </table>
-    <ul class="pagination">
-      <li class="active"><a>1</a></li>
-      <li><a>2</a></li>
-    </ul>
-  </body></html>
-`;
-
-const METER_LIST_FOR_DT001_HTML = `
-  <html><body>
-    <table>
-      <thead><tr><th>Meter ID</th><th>Serial No</th><th>Make</th><th>Phase</th><th>Status</th><th>DT</th></tr></thead>
-      <tbody>
-        <tr><td>J100000</td><td>SE33962</td><td>HPL</td><td>Single</td><td>Active</td><td>DT-001</td></tr>
-        <tr><td>J100001</td><td>SE33963</td><td>L&T</td><td>Three</td><td>Active</td><td>DT-001</td></tr>
-        <tr><td>J100002</td><td>SE33964</td><td>HPL</td><td>Single</td><td>Active</td><td>DT-002</td></tr>
-      </tbody>
-    </table>
-    <ul class="pagination">
-      <li class="active"><a>1</a></li>
-    </ul>
-  </body></html>
-`;
+const METER_LIST_FOR_DT001_JSON = {
+  data: [
+    { meterId: 'J100000', serialNo: 'SE33962', make: 'HPL', phaseType: 'Single', installStatus: 'Active', dtCode: 'DT-001' },
+    { meterId: 'J100001', serialNo: 'SE33963', make: 'L&T', phaseType: 'Three', installStatus: 'Active', dtCode: 'DT-001' },
+    { meterId: 'J100002', serialNo: 'SE33964', make: 'HPL', phaseType: 'Single', installStatus: 'Active', dtCode: 'DT-002' },
+  ],
+  total: 3,
+  page: 1,
+  pageSize: 20,
+};
 
 // ---------------------------------------------------------------------------
 // GET /api/v1/transformers
@@ -48,7 +33,7 @@ const METER_LIST_FOR_DT001_HTML = `
 
 describe('GET /api/v1/transformers', () => {
   beforeEach(() => {
-    portalClient.fetchTransformerList.mockResolvedValue(TRANSFORMER_LIST_HTML);
+    portalClient.fetchTransformerList.mockResolvedValue(TRANSFORMER_LIST_JSON);
   });
 
   it('returns 200 with transformer list and pagination', async () => {
@@ -61,7 +46,12 @@ describe('GET /api/v1/transformers', () => {
       feeder: 'F-001',
       capacityKva: 100,
     });
-    expect(res.body.pagination).toMatchObject({ currentPage: 1, totalPages: 2 });
+    expect(res.body.pagination).toMatchObject({ total: 40, page: 1, pageSize: 20 });
+  });
+
+  it('parses string capacity to number', async () => {
+    const res = await request(app).get('/api/v1/transformers');
+    expect(typeof res.body.data[0].capacityKva).toBe('number');
   });
 
   it('passes page param to portal client', async () => {
@@ -95,7 +85,7 @@ describe('GET /api/v1/transformers', () => {
 
 describe('GET /api/v1/transformers/:transformerId/meters', () => {
   beforeEach(() => {
-    portalClient.fetchMeterList.mockResolvedValue(METER_LIST_FOR_DT001_HTML);
+    portalClient.fetchMeterList.mockResolvedValue(METER_LIST_FOR_DT001_JSON);
   });
 
   it('returns 200 with meters for the transformer', async () => {
@@ -106,9 +96,8 @@ describe('GET /api/v1/transformers/:transformerId/meters', () => {
 
   it('only returns meters matching the transformer ID', async () => {
     const res = await request(app).get('/api/v1/transformers/DT-001/meters');
-    // Fixture has 3 meters: 2 for DT-001, 1 for DT-002
-    // Local filter must exclude the DT-002 meter
     expect(res.body.data.every((m) => m.transformerCode === 'DT-001')).toBe(true);
+    expect(res.body.data).toHaveLength(2);
   });
 
   it('returns empty array when no meters match transformer', async () => {

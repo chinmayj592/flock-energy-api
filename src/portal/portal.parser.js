@@ -1,174 +1,80 @@
 'use strict';
 
-const cheerio = require('cheerio');
+// OBSERVED field names from portal JSON responses:
+//   meterId, serialNo, make, phaseType, installStatus, dtCode
+//   latitude (string), longitude (string)
+//   timestamp (string DD/MM/YYYY HH:mm), kwh (string), kvah (string), voltR (string)
 
-function parseMeterList(html) {
-  const $ = cheerio.load(html);
-  const meters = [];
+function parseMeterList(json) {
+  const raw = json?.data;
+  if (!Array.isArray(raw)) return { meters: [], pagination: { currentPage: 1, totalPages: 1 } };
 
-  $('table tbody tr').each((_, row) => {
-    const cells = $(row).find('td');
-    if (cells.length === 0) return;
-
-    const meterId = text($, cells.eq(0));
-    if (!meterId) return;
-
-    meters.push({
-      meterId,
-      serialNumber: text($, cells.eq(1)),
-      make: text($, cells.eq(2)),
-      phaseType: text($, cells.eq(3)),
-      installationStatus: text($, cells.eq(4)),
-      transformerCode: text($, cells.eq(5)),
-    });
-  });
-
-  return { meters, pagination: parsePagination($) };
-}
-
-function parseMeterDetail(html) {
-  const $ = cheerio.load(html);
-  const fields = extractKeyValuePairs($);
+  const meters = raw.map((m) => ({
+    meterId: m.meterId || null,
+    serialNumber: m.serialNo || null,
+    make: m.make || null,
+    phaseType: m.phaseType || null,
+    installationStatus: m.installStatus || null,
+    transformerCode: m.dtCode || null,
+  }));
 
   return {
-    meterId: fields['Meter ID'] || fields['Meter No'] || null,
-    serialNumber: fields['Serial No'] || fields['Serial Number'] || null,
-    make: fields['Make'] || null,
-    phaseType: fields['Phase Type'] || fields['Phase'] || null,
-    installationStatus: fields['Installation Status'] || null,
-    installationType: fields['Installation Type'] || null,
-    location: {
-      latitude: parseCoordinate(fields['Latitude'] || fields['Location']),
-      longitude: parseCoordinate(fields['Longitude']),
+    meters,
+    pagination: {
+      total: toNumber(json.total) || 0,
+      page: toNumber(json.page) || 1,
+      pageSize: toNumber(json.pageSize) || 20,
     },
-    network: {
-      zone: fields['Zone'] || null,
-      circle: fields['Circle'] || null,
-      division: fields['Division'] || null,
-      subdivision: fields['Subdivision'] || null,
-      substation: fields['Substation'] || null,
-      feeder: fields['Feeder'] || null,
-      transformerCode: fields['Distribution Transformer'] || fields['DT'] || null,
-      transformerName: fields['Transformer Name'] || null,
-    },
-    consumption: parseConsumptionTable($),
   };
 }
 
-function parseConsumptionTable($) {
-  const readings = [];
+function parseMeterGeo(json) {
+  const raw = json?.data;
+  if (!raw) return { latitude: null, longitude: null };
 
-  $('table').each((_, table) => {
-    const headers = $(table)
-      .find('thead th, thead td')
-      .map((_, th) => $(th).text().trim().toLowerCase())
-      .get();
-
-    const isConsumptionTable = headers.some(
-      (h) => h.includes('kwh') || h.includes('timestamp')
-    );
-
-    if (!isConsumptionTable) return;
-
-    $(table)
-      .find('tbody tr')
-      .each((_, row) => {
-        const cells = $(row).find('td');
-        if (cells.length < 3) return;
-
-        const timestamp = text($, cells.eq(0));
-        if (!timestamp) return;
-
-        readings.push({
-          timestamp,
-          kwh: parseNumber(text($, cells.eq(1))),
-          kvah: parseNumber(text($, cells.eq(2))),
-          voltageR: parseNumber(text($, cells.eq(3))),
-        });
-      });
-
-    return false;
-  });
-
-  return readings;
+  return {
+    latitude: toNumber(raw.latitude),
+    longitude: toNumber(raw.longitude),
+  };
 }
 
-function parseTransformerList(html) {
-  const $ = cheerio.load(html);
-  const transformers = [];
+function parseMeterEnergy(json) {
+  const raw = json?.data;
+  if (!Array.isArray(raw)) return [];
 
-  $('table tbody tr').each((_, row) => {
-    const cells = $(row).find('td');
-    if (cells.length === 0) return;
-
-    const transformerId = text($, cells.eq(0));
-    if (!transformerId) return;
-
-    transformers.push({
-      transformerId,
-      name: text($, cells.eq(1)),
-      feeder: text($, cells.eq(2)),
-      capacityKva: parseNumber(text($, cells.eq(3))),
-    });
-  });
-
-  return { transformers, pagination: parsePagination($) };
+  return raw.map((r) => ({
+    timestamp: r.timestamp || null,
+    kwh: toNumber(r.kwh),
+    kvah: toNumber(r.kvah),
+    voltageR: toNumber(r.voltR),
+  }));
 }
 
-function parsePagination($) {
-  const activePage = $('.pagination .active, [aria-current="page"]').first();
-  const currentPage = parseNumber(activePage.text()) || 1;
+function parseTransformerList(json) {
+  const raw = json?.data;
+  if (!Array.isArray(raw)) return { transformers: [], pagination: { currentPage: 1, totalPages: 1 } };
 
-  const allPageLinks = $('.pagination a, .pagination button')
-    .map((_, el) => parseNumber($(el).text()))
-    .get()
-    .filter((n) => n !== null && !isNaN(n));
+  const transformers = raw.map((t) => ({
+    transformerId: t.transformerId || t.dtCode || null,
+    name: t.name || null,
+    feeder: t.feeder || null,
+    capacityKva: toNumber(t.capacityKva || t.capacity),
+  }));
 
-  const totalPages =
-    allPageLinks.length > 0 ? Math.max(...allPageLinks) : currentPage;
-
-  return { currentPage, totalPages };
+  return {
+    transformers,
+    pagination: {
+      total: toNumber(json.total) || 0,
+      page: toNumber(json.page) || 1,
+      pageSize: toNumber(json.pageSize) || 20,
+    },
+  };
 }
 
-function extractKeyValuePairs($) {
-  const fields = {};
-
-  $('tr').each((_, row) => {
-    const label = $(row).find('th').first().text().trim();
-    const value = $(row).find('td').first().text().trim();
-    if (label && value) fields[label] = value;
-  });
-
-  $('dt').each((_, dt) => {
-    const label = $(dt).text().trim();
-    const value = $(dt).next('dd').text().trim();
-    if (label && value) fields[label] = value;
-  });
-
-  return fields;
-}
-
-function text($, el) {
-  const t = $(el).text().trim();
-  return t || null;
-}
-
-function parseNumber(value) {
-  if (value === null || value === undefined) return null;
-  const cleaned = String(value).replace(/[^\d.-]/g, '');
-  const num = parseFloat(cleaned);
-  return isNaN(num) ? null : num;
-}
-
-function parseCoordinate(value) {
-  if (!value) return null;
+function toNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
   const num = parseFloat(value);
   return isNaN(num) ? null : num;
 }
 
-module.exports = {
-  parseMeterList,
-  parseMeterDetail,
-  parseConsumptionTable,
-  parseTransformerList,
-};
+module.exports = { parseMeterList, parseMeterGeo, parseMeterEnergy, parseTransformerList };

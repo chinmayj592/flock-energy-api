@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Flock Energy API",
-    "description": "Clean REST API over the Urja Meter Ops legacy portal. Retrieves meter and transformer data, normalizes it, and exposes stable JSON endpoints. The legacy portal's implementation details are never exposed.",
+    "description": "Clean REST API over the Urja Meter Ops legacy portal. Retrieves meter and transformer data, normalizes it, and exposes stable JSON endpoints.",
     "version": "1.0.0"
   },
   "servers": [
@@ -12,9 +12,9 @@
     }
   ],
   "tags": [
-    { "name": "Health", "description": "Service health check" },
-    { "name": "Meters", "description": "Meter listing, detail, and consumption" },
-    { "name": "Transformers", "description": "Transformer listing and associated meters" }
+    { "name": "Health" },
+    { "name": "Meters" },
+    { "name": "Transformers" }
   ],
   "paths": {
     "/health": {
@@ -27,11 +27,7 @@
             "description": "Service is running",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/HealthResponse" },
-                "example": {
-                  "status": "ok",
-                  "timestamp": "2024-01-01T00:00:00.000Z"
-                }
+                "schema": { "$ref": "#/components/schemas/HealthResponse" }
               }
             }
           }
@@ -42,21 +38,21 @@
       "get": {
         "tags": ["Meters"],
         "summary": "List meters",
-        "description": "Returns a paginated list of meters from the legacy portal. Supports optional search and page parameters.",
+        "description": "Returns a paginated list of meters. The `q` parameter is forwarded directly to the portal search endpoint.",
         "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Search text — matches partial meter ID or serial number.",
+            "required": false,
+            "schema": { "type": "string", "default": "" }
+          },
           {
             "name": "page",
             "in": "query",
-            "description": "Page number (1-based). Defaults to 1.",
+            "description": "Page number, 1-based.",
             "required": false,
             "schema": { "type": "integer", "minimum": 1, "default": 1 }
-          },
-          {
-            "name": "search",
-            "in": "query",
-            "description": "Search term (e.g. meter ID). NOTE: Whether the legacy portal supports search filtering is unverified. The parameter is forwarded to the portal as-is.",
-            "required": false,
-            "schema": { "type": "string" }
           }
         ],
         "responses": {
@@ -72,14 +68,11 @@
                       "serialNumber": "SE33962",
                       "make": "HPL",
                       "phaseType": "Single",
-                      "installationStatus": "Active",
+                      "installationStatus": "Decommissioned",
                       "transformerCode": "DT-001"
                     }
                   ],
-                  "pagination": {
-                    "currentPage": 1,
-                    "totalPages": 5
-                  }
+                  "pagination": { "total": 403, "page": 1, "pageSize": 20 }
                 }
               }
             }
@@ -93,14 +86,14 @@
       "get": {
         "tags": ["Meters"],
         "summary": "Get meter detail",
-        "description": "Returns full detail for a single meter including network hierarchy, location, and consumption readings.",
+        "description": "Returns meter nameplate fields, location, and consumption readings. Makes three portal requests in parallel (search, geo, energy).",
         "parameters": [
           {
             "name": "meterId",
             "in": "path",
-            "description": "Meter ID (e.g. J100000)",
             "required": true,
-            "schema": { "type": "string" }
+            "schema": { "type": "string" },
+            "example": "J100000"
           }
         ],
         "responses": {
@@ -108,39 +101,7 @@
             "description": "Full meter detail",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/MeterDetailResponse" },
-                "example": {
-                  "data": {
-                    "meterId": "J100000",
-                    "serialNumber": "SE33962",
-                    "make": "HPL",
-                    "phaseType": "Single Phase",
-                    "installationStatus": "Active",
-                    "installationType": "Residential",
-                    "location": {
-                      "latitude": 28.5355,
-                      "longitude": 77.391
-                    },
-                    "network": {
-                      "zone": "North",
-                      "circle": "Circle 1",
-                      "division": "Division A",
-                      "subdivision": "Sub A1",
-                      "substation": "SS-01",
-                      "feeder": "F-001",
-                      "transformerCode": "DT-001",
-                      "transformerName": null
-                    },
-                    "consumption": [
-                      {
-                        "timestamp": "2024-01-01 00:00",
-                        "kwh": 1.23,
-                        "kvah": 1.45,
-                        "voltageR": 230.5
-                      }
-                    ]
-                  }
-                }
+                "schema": { "$ref": "#/components/schemas/MeterDetailResponse" }
               }
             }
           },
@@ -149,18 +110,51 @@
         }
       }
     },
-    "/api/v1/meters/{meterId}/consumption": {
+    "/api/v1/meters/{meterId}/location": {
       "get": {
         "tags": ["Meters"],
-        "summary": "Get meter consumption readings",
-        "description": "Returns half-hourly consumption readings for a meter. Data is sourced from the meter detail page. Use `limit` to cap the number of returned readings.",
+        "summary": "Get meter location",
+        "description": "Returns the geographical coordinates of a meter. Coordinates are returned as numbers — the portal returns them as strings, which are parsed at the boundary.",
         "parameters": [
           {
             "name": "meterId",
             "in": "path",
-            "description": "Meter ID (e.g. J100000)",
             "required": true,
-            "schema": { "type": "string" }
+            "schema": { "type": "string" },
+            "example": "J100000"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Meter location",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/MeterLocationResponse" },
+                "example": {
+                  "data": {
+                    "latitude": 26.938961002479868,
+                    "longitude": 75.83095696146852
+                  }
+                }
+              }
+            }
+          },
+          "502": { "$ref": "#/components/responses/PortalError" }
+        }
+      }
+    },
+    "/api/v1/meters/{meterId}/consumption": {
+      "get": {
+        "tags": ["Meters"],
+        "summary": "Get meter consumption",
+        "description": "Returns energy consumption readings for a meter. Readings are half-hourly. All numeric values are parsed from strings at the boundary. Timestamp format is DD/MM/YYYY HH:mm — timezone is unverified.",
+        "parameters": [
+          {
+            "name": "meterId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "example": "J100000"
           },
           {
             "name": "limit",
@@ -179,28 +173,18 @@
                 "example": {
                   "data": [
                     {
-                      "timestamp": "2024-01-01 00:00",
-                      "kwh": 1.23,
-                      "kvah": 1.45,
-                      "voltageR": 230.5
-                    },
-                    {
-                      "timestamp": "2024-01-01 00:30",
-                      "kwh": 1.30,
-                      "kvah": 1.50,
-                      "voltageR": 231.0
+                      "timestamp": "23/06/2026 23:30",
+                      "kwh": 48438.74,
+                      "kvah": 52313.84,
+                      "voltageR": 226
                     }
                   ],
-                  "meta": {
-                    "meterId": "J100000",
-                    "count": 2
-                  }
+                  "meta": { "meterId": "J100000", "count": 1 }
                 }
               }
             }
           },
           "400": { "$ref": "#/components/responses/ValidationError" },
-          "404": { "$ref": "#/components/responses/NotFound" },
           "502": { "$ref": "#/components/responses/PortalError" }
         }
       }
@@ -209,12 +193,11 @@
       "get": {
         "tags": ["Transformers"],
         "summary": "List transformers",
-        "description": "Returns a paginated list of distribution transformers from the legacy portal.",
+        "description": "Returns a paginated list of distribution transformers.",
         "parameters": [
           {
             "name": "page",
             "in": "query",
-            "description": "Page number (1-based). Defaults to 1.",
             "required": false,
             "schema": { "type": "integer", "minimum": 1, "default": 1 }
           }
@@ -234,10 +217,7 @@
                       "capacityKva": 100
                     }
                   ],
-                  "pagination": {
-                    "currentPage": 1,
-                    "totalPages": 3
-                  }
+                  "pagination": { "total": 40, "page": 1, "pageSize": 20 }
                 }
               }
             }
@@ -251,38 +231,22 @@
       "get": {
         "tags": ["Transformers"],
         "summary": "Get meters for a transformer",
-        "description": "Returns meters associated with a given transformer. Fetches the meter list from the portal using the transformer ID as a search hint, then filters locally by transformer code. Result is limited to page 1 of the portal response.",
+        "description": "Returns meters associated with a transformer. Fetches the meter list using the transformer ID as a search hint, then filters locally by transformer code. Limited to page 1 of portal results.",
         "parameters": [
           {
             "name": "transformerId",
             "in": "path",
-            "description": "Transformer code (e.g. DT-001)",
             "required": true,
-            "schema": { "type": "string" }
+            "schema": { "type": "string" },
+            "example": "DT-001"
           }
         ],
         "responses": {
           "200": {
-            "description": "Meters belonging to the transformer",
+            "description": "Meters for the transformer",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/TransformerMetersResponse" },
-                "example": {
-                  "data": [
-                    {
-                      "meterId": "J100000",
-                      "serialNumber": "SE33962",
-                      "make": "HPL",
-                      "phaseType": "Single",
-                      "installationStatus": "Active",
-                      "transformerCode": "DT-001"
-                    }
-                  ],
-                  "meta": {
-                    "transformerId": "DT-001",
-                    "count": 1
-                  }
-                }
+                "schema": { "$ref": "#/components/schemas/TransformerMetersResponse" }
               }
             }
           },
@@ -300,122 +264,87 @@
           "timestamp": { "type": "string", "format": "date-time" }
         }
       },
+      "Pagination": {
+        "type": "object",
+        "properties": {
+          "total": { "type": "integer", "example": 403 },
+          "page": { "type": "integer", "example": 1 },
+          "pageSize": { "type": "integer", "example": 20 }
+        }
+      },
       "MeterSummary": {
         "type": "object",
         "properties": {
           "meterId": { "type": "string", "example": "J100000" },
-          "serialNumber": { "type": "string", "example": "SE33962", "nullable": true },
-          "make": { "type": "string", "example": "HPL", "nullable": true },
-          "phaseType": { "type": "string", "example": "Single", "nullable": true },
-          "installationStatus": { "type": "string", "example": "Active", "nullable": true },
-          "transformerCode": { "type": "string", "example": "DT-001", "nullable": true }
+          "serialNumber": { "type": "string", "nullable": true, "example": "SE33962" },
+          "make": { "type": "string", "nullable": true, "example": "HPL" },
+          "phaseType": { "type": "string", "nullable": true, "example": "Single" },
+          "installationStatus": { "type": "string", "nullable": true, "example": "Decommissioned" },
+          "transformerCode": { "type": "string", "nullable": true, "example": "DT-001" }
         }
       },
-      "MeterDetail": {
+      "MeterLocation": {
         "type": "object",
         "properties": {
-          "meterId": { "type": "string", "example": "J100000" },
-          "serialNumber": { "type": "string", "nullable": true },
-          "make": { "type": "string", "nullable": true },
-          "phaseType": { "type": "string", "nullable": true },
-          "installationStatus": { "type": "string", "nullable": true },
-          "installationType": { "type": "string", "nullable": true },
-          "location": {
-            "type": "object",
-            "properties": {
-              "latitude": { "type": "number", "nullable": true },
-              "longitude": { "type": "number", "nullable": true }
-            }
-          },
-          "network": {
-            "type": "object",
-            "properties": {
-              "zone": { "type": "string", "nullable": true },
-              "circle": { "type": "string", "nullable": true },
-              "division": { "type": "string", "nullable": true },
-              "subdivision": { "type": "string", "nullable": true },
-              "substation": { "type": "string", "nullable": true },
-              "feeder": { "type": "string", "nullable": true },
-              "transformerCode": { "type": "string", "nullable": true },
-              "transformerName": { "type": "string", "nullable": true }
-            }
-          },
-          "consumption": {
-            "type": "array",
-            "items": { "$ref": "#/components/schemas/ConsumptionReading" }
-          }
+          "latitude": { "type": "number", "nullable": true, "example": 26.938961002479868 },
+          "longitude": { "type": "number", "nullable": true, "example": 75.83095696146852 }
         }
       },
       "ConsumptionReading": {
         "type": "object",
         "properties": {
-          "timestamp": { "type": "string", "example": "2024-01-01 00:00" },
-          "kwh": { "type": "number", "nullable": true, "example": 1.23 },
-          "kvah": { "type": "number", "nullable": true, "example": 1.45 },
-          "voltageR": { "type": "number", "nullable": true, "example": 230.5 }
+          "timestamp": { "type": "string", "example": "23/06/2026 23:30", "description": "DD/MM/YYYY HH:mm — timezone unverified" },
+          "kwh": { "type": "number", "nullable": true, "example": 48438.74 },
+          "kvah": { "type": "number", "nullable": true, "example": 52313.84 },
+          "voltageR": { "type": "number", "nullable": true, "example": 226 }
         }
       },
       "TransformerSummary": {
         "type": "object",
         "properties": {
           "transformerId": { "type": "string", "example": "DT-001" },
-          "name": { "type": "string", "example": "Malviya Nagar DT 1", "nullable": true },
-          "feeder": { "type": "string", "example": "F-001", "nullable": true },
-          "capacityKva": { "type": "number", "example": 100, "nullable": true }
-        }
-      },
-      "Pagination": {
-        "type": "object",
-        "properties": {
-          "currentPage": { "type": "integer", "example": 1 },
-          "totalPages": { "type": "integer", "example": 5 }
-        }
-      },
-      "ErrorResponse": {
-        "type": "object",
-        "properties": {
-          "error": {
-            "type": "object",
-            "properties": {
-              "code": { "type": "string", "example": "VALIDATION_ERROR" },
-              "message": { "type": "string", "example": "Invalid request parameters" },
-              "details": {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "field": { "type": "string" },
-                    "message": { "type": "string" }
-                  }
-                }
-              }
-            }
-          }
+          "name": { "type": "string", "nullable": true, "example": "Malviya Nagar DT 1" },
+          "feeder": { "type": "string", "nullable": true, "example": "F-001" },
+          "capacityKva": { "type": "number", "nullable": true, "example": 100 }
         }
       },
       "MeterListResponse": {
         "type": "object",
         "properties": {
-          "data": {
-            "type": "array",
-            "items": { "$ref": "#/components/schemas/MeterSummary" }
-          },
+          "data": { "type": "array", "items": { "$ref": "#/components/schemas/MeterSummary" } },
           "pagination": { "$ref": "#/components/schemas/Pagination" }
         }
       },
       "MeterDetailResponse": {
         "type": "object",
         "properties": {
-          "data": { "$ref": "#/components/schemas/MeterDetail" }
+          "data": {
+            "allOf": [
+              { "$ref": "#/components/schemas/MeterSummary" },
+              {
+                "type": "object",
+                "properties": {
+                  "location": { "$ref": "#/components/schemas/MeterLocation" },
+                  "consumption": {
+                    "type": "array",
+                    "items": { "$ref": "#/components/schemas/ConsumptionReading" }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "MeterLocationResponse": {
+        "type": "object",
+        "properties": {
+          "data": { "$ref": "#/components/schemas/MeterLocation" }
         }
       },
       "ConsumptionResponse": {
         "type": "object",
         "properties": {
-          "data": {
-            "type": "array",
-            "items": { "$ref": "#/components/schemas/ConsumptionReading" }
-          },
+          "data": { "type": "array", "items": { "$ref": "#/components/schemas/ConsumptionReading" } },
           "meta": {
             "type": "object",
             "properties": {
@@ -428,25 +357,32 @@
       "TransformerListResponse": {
         "type": "object",
         "properties": {
-          "data": {
-            "type": "array",
-            "items": { "$ref": "#/components/schemas/TransformerSummary" }
-          },
+          "data": { "type": "array", "items": { "$ref": "#/components/schemas/TransformerSummary" } },
           "pagination": { "$ref": "#/components/schemas/Pagination" }
         }
       },
       "TransformerMetersResponse": {
         "type": "object",
         "properties": {
-          "data": {
-            "type": "array",
-            "items": { "$ref": "#/components/schemas/MeterSummary" }
-          },
+          "data": { "type": "array", "items": { "$ref": "#/components/schemas/MeterSummary" } },
           "meta": {
             "type": "object",
             "properties": {
               "transformerId": { "type": "string" },
               "count": { "type": "integer" }
+            }
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string", "example": "VALIDATION_ERROR" },
+              "message": { "type": "string", "example": "Invalid request parameters" },
+              "details": { "type": "array", "items": { "type": "object" } }
             }
           }
         }
@@ -459,11 +395,7 @@
           "application/json": {
             "schema": { "$ref": "#/components/schemas/ErrorResponse" },
             "example": {
-              "error": {
-                "code": "VALIDATION_ERROR",
-                "message": "Invalid request parameters",
-                "details": [{ "field": "page", "message": "page must be >= 1" }]
-              }
+              "error": { "code": "VALIDATION_ERROR", "message": "Invalid request parameters", "details": [{ "field": "page", "message": "page must be >= 1" }] }
             }
           }
         }
@@ -474,11 +406,7 @@
           "application/json": {
             "schema": { "$ref": "#/components/schemas/ErrorResponse" },
             "example": {
-              "error": {
-                "code": "METER_NOT_FOUND",
-                "message": "Meter J999999 not found",
-                "details": []
-              }
+              "error": { "code": "METER_NOT_FOUND", "message": "Meter J999999 not found", "details": [] }
             }
           }
         }
@@ -489,11 +417,7 @@
           "application/json": {
             "schema": { "$ref": "#/components/schemas/ErrorResponse" },
             "example": {
-              "error": {
-                "code": "PORTAL_UNAVAILABLE",
-                "message": "Portal unavailable: connect ECONNREFUSED",
-                "details": []
-              }
+              "error": { "code": "PORTAL_UNAVAILABLE", "message": "Portal unavailable: connect ECONNREFUSED", "details": [] }
             }
           }
         }

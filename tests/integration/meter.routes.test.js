@@ -3,58 +3,38 @@
 const request = require('supertest');
 const app = require('../../src/app');
 
-// Mock the portal client so tests never hit the real portal
 jest.mock('../../src/portal/portal.client');
 const portalClient = require('../../src/portal/portal.client');
 
-// ---------------------------------------------------------------------------
-// Fixtures
-// ---------------------------------------------------------------------------
+const METER_LIST_JSON = {
+  data: [
+    { meterId: 'J100000', serialNo: 'SE33962', make: 'HPL', phaseType: 'Single', installStatus: 'Active', dtCode: 'DT-001' },
+    { meterId: 'J100001', serialNo: 'SE33963', make: 'L&T', phaseType: 'Three', installStatus: 'Inactive', dtCode: 'DT-002' },
+  ],
+  total: 40,
+  page: 1,
+  pageSize: 20,
+};
 
-const METER_LIST_HTML = `
-  <html><body>
-    <table>
-      <thead><tr><th>Meter ID</th><th>Serial No</th><th>Make</th><th>Phase</th><th>Status</th><th>DT</th></tr></thead>
-      <tbody>
-        <tr><td>J100000</td><td>SE33962</td><td>HPL</td><td>Single</td><td>Active</td><td>DT-001</td></tr>
-        <tr><td>J100001</td><td>SE33963</td><td>L&T</td><td>Three</td><td>Inactive</td><td>DT-002</td></tr>
-      </tbody>
-    </table>
-    <ul class="pagination">
-      <li class="active"><a>1</a></li>
-      <li><a>2</a></li>
-    </ul>
-  </body></html>
-`;
+const METER_SEARCH_J100000_JSON = {
+  data: [
+    { meterId: 'J100000', serialNo: 'SE33962', make: 'HPL', phaseType: 'Single', installStatus: 'Active', dtCode: 'DT-001' },
+  ],
+  total: 1,
+  page: 1,
+  pageSize: 20,
+};
 
-const METER_DETAIL_HTML = `
-  <html><body>
-    <table>
-      <tr><th>Meter ID</th><td>J100000</td></tr>
-      <tr><th>Serial No</th><td>SE33962</td></tr>
-      <tr><th>Make</th><td>HPL</td></tr>
-      <tr><th>Phase Type</th><td>Single Phase</td></tr>
-      <tr><th>Installation Status</th><td>Active</td></tr>
-      <tr><th>Installation Type</th><td>Residential</td></tr>
-      <tr><th>Latitude</th><td>28.5355</td></tr>
-      <tr><th>Longitude</th><td>77.3910</td></tr>
-      <tr><th>Zone</th><td>North</td></tr>
-      <tr><th>Circle</th><td>Circle 1</td></tr>
-      <tr><th>Division</th><td>Division A</td></tr>
-      <tr><th>Subdivision</th><td>Sub A1</td></tr>
-      <tr><th>Substation</th><td>SS-01</td></tr>
-      <tr><th>Feeder</th><td>F-001</td></tr>
-      <tr><th>Distribution Transformer</th><td>DT-001</td></tr>
-    </table>
-    <table>
-      <thead><tr><th>Timestamp</th><th>kWh</th><th>kVAh</th><th>V(R)</th></tr></thead>
-      <tbody>
-        <tr><td>2024-01-01 00:00</td><td>1.23</td><td>1.45</td><td>230.5</td></tr>
-        <tr><td>2024-01-01 00:30</td><td>1.30</td><td>1.50</td><td>231.0</td></tr>
-      </tbody>
-    </table>
-  </body></html>
-`;
+const GEO_JSON = {
+  data: { latitude: '26.938961002479868', longitude: '75.83095696146852' },
+};
+
+const ENERGY_JSON = {
+  data: [
+    { timestamp: '23/06/2026 23:30', kwh: '48438.74', kvah: '52313.84', voltR: '226' },
+    { timestamp: '23/06/2026 23:00', kwh: '48430.10', kvah: '52300.00', voltR: '225' },
+  ],
+};
 
 // ---------------------------------------------------------------------------
 // GET /api/v1/meters
@@ -62,7 +42,7 @@ const METER_DETAIL_HTML = `
 
 describe('GET /api/v1/meters', () => {
   beforeEach(() => {
-    portalClient.fetchMeterList.mockResolvedValue(METER_LIST_HTML);
+    portalClient.fetchMeterList.mockResolvedValue(METER_LIST_JSON);
   });
 
   it('returns 200 with meter list and pagination', async () => {
@@ -70,16 +50,23 @@ describe('GET /api/v1/meters', () => {
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveLength(2);
     expect(res.body.data[0].meterId).toBe('J100000');
-    expect(res.body.pagination).toMatchObject({ currentPage: 1, totalPages: 2 });
+    expect(res.body.pagination).toMatchObject({ total: 40, page: 1, pageSize: 20 });
   });
 
-  it('passes page query param to portal client', async () => {
+  it('maps portal field names to clean API field names', async () => {
+    const res = await request(app).get('/api/v1/meters');
+    expect(res.body.data[0].serialNumber).toBe('SE33962');
+    expect(res.body.data[0].installationStatus).toBe('Active');
+    expect(res.body.data[0].transformerCode).toBe('DT-001');
+  });
+
+  it('passes page param to portal client', async () => {
     await request(app).get('/api/v1/meters?page=2');
     expect(portalClient.fetchMeterList).toHaveBeenCalledWith(2, null);
   });
 
-  it('passes search query param to portal client', async () => {
-    await request(app).get('/api/v1/meters?search=J100000');
+  it('passes q param to portal client', async () => {
+    await request(app).get('/api/v1/meters?q=J100000');
     expect(portalClient.fetchMeterList).toHaveBeenCalledWith(1, 'J100000');
   });
 
@@ -109,30 +96,61 @@ describe('GET /api/v1/meters', () => {
 
 describe('GET /api/v1/meters/:meterId', () => {
   beforeEach(() => {
-    portalClient.fetchMeterDetail.mockResolvedValue(METER_DETAIL_HTML);
+    portalClient.fetchMeterList.mockResolvedValue(METER_SEARCH_J100000_JSON);
+    portalClient.fetchMeterGeo.mockResolvedValue(GEO_JSON);
+    portalClient.fetchMeterEnergy.mockResolvedValue(ENERGY_JSON);
   });
 
-  it('returns 200 with full meter detail', async () => {
+  it('returns 200 with meter detail including location and consumption', async () => {
     const res = await request(app).get('/api/v1/meters/J100000');
     expect(res.status).toBe(200);
     expect(res.body.data.meterId).toBe('J100000');
     expect(res.body.data.serialNumber).toBe('SE33962');
-    expect(res.body.data.network.zone).toBe('North');
-    expect(res.body.data.location.latitude).toBe(28.5355);
-  });
-
-  it('returns consumption readings in detail response', async () => {
-    const res = await request(app).get('/api/v1/meters/J100000');
+    expect(res.body.data.location.latitude).toBe(26.938961002479868);
     expect(res.body.data.consumption).toHaveLength(2);
   });
 
-  it('returns 404 when portal returns empty meter page', async () => {
-    portalClient.fetchMeterDetail.mockResolvedValue(
-      '<html><body><table></table></body></html>'
-    );
+  it('parses string coordinates to numbers', async () => {
+    const res = await request(app).get('/api/v1/meters/J100000');
+    expect(typeof res.body.data.location.latitude).toBe('number');
+    expect(typeof res.body.data.location.longitude).toBe('number');
+  });
+
+  it('returns 404 when meter not found in search results', async () => {
+    portalClient.fetchMeterList.mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 20 });
     const res = await request(app).get('/api/v1/meters/INVALID');
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('METER_NOT_FOUND');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/v1/meters/:meterId/location
+// ---------------------------------------------------------------------------
+
+describe('GET /api/v1/meters/:meterId/location', () => {
+  beforeEach(() => {
+    portalClient.fetchMeterGeo.mockResolvedValue(GEO_JSON);
+  });
+
+  it('returns 200 with coordinates parsed to numbers', async () => {
+    const res = await request(app).get('/api/v1/meters/J100000/location');
+    expect(res.status).toBe(200);
+    expect(res.body.data.latitude).toBe(26.938961002479868);
+    expect(res.body.data.longitude).toBe(75.83095696146852);
+    expect(typeof res.body.data.latitude).toBe('number');
+  });
+
+  it('returns 502 when portal is unavailable', async () => {
+    const err = new Error('timeout');
+    err.isOperational = true;
+    err.statusCode = 502;
+    err.code = 'PORTAL_UNAVAILABLE';
+    err.details = [];
+    portalClient.fetchMeterGeo.mockRejectedValue(err);
+
+    const res = await request(app).get('/api/v1/meters/J100000/location');
+    expect(res.status).toBe(502);
   });
 });
 
@@ -142,18 +160,20 @@ describe('GET /api/v1/meters/:meterId', () => {
 
 describe('GET /api/v1/meters/:meterId/consumption', () => {
   beforeEach(() => {
-    portalClient.fetchMeterDetail.mockResolvedValue(METER_DETAIL_HTML);
+    portalClient.fetchMeterEnergy.mockResolvedValue(ENERGY_JSON);
   });
 
-  it('returns 200 with consumption readings', async () => {
+  it('returns 200 with consumption readings parsed to numbers', async () => {
     const res = await request(app).get('/api/v1/meters/J100000/consumption');
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveLength(2);
     expect(res.body.meta.meterId).toBe('J100000');
     expect(res.body.meta.count).toBe(2);
+    expect(typeof res.body.data[0].kwh).toBe('number');
+    expect(typeof res.body.data[0].voltageR).toBe('number');
   });
 
-  it('respects limit query param', async () => {
+  it('respects limit param', async () => {
     const res = await request(app).get('/api/v1/meters/J100000/consumption?limit=1');
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveLength(1);
