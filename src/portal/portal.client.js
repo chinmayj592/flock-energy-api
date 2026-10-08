@@ -1,0 +1,102 @@
+'use strict';
+
+const axios = require('axios');
+const config = require('../config/env');
+const { getSessionCookie, refreshSession } = require('./portal.auth');
+
+async function portalGet(path, params = {}) {
+  const cookie = await getSessionCookie();
+  let response;
+
+  try {
+    response = await makeRequest(path, params, cookie);
+  } catch (err) {
+    throw portalUnavailableError(err);
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    let freshCookie;
+    try {
+      freshCookie = await refreshSession();
+    } catch (err) {
+      throw err;
+    }
+
+    try {
+      response = await makeRequest(path, params, freshCookie);
+    } catch (err) {
+      throw portalUnavailableError(err);
+    }
+  }
+
+  if (response.status === 404) {
+    throw createOperationalError(404, 'PORTAL_NOT_FOUND', `Portal resource not found: ${path}`);
+  }
+
+  if (response.status >= 400) {
+    throw createOperationalError(502, 'PORTAL_ERROR', `Portal returned status ${response.status} for ${path}`);
+  }
+
+  return response.data;
+}
+
+function buildMeterListUrl(page, search) {
+  const params = {};
+  if (page && page > 1) params.page = page;
+  if (search) params.q = search;
+  return { path: '/portal/meters/search', params };
+}
+
+function buildMeterDetailUrl(meterId) {
+  return { path: `/portal/meters/${meterId}`, params: {} };
+}
+
+function buildTransformerListUrl(page) {
+  const params = {};
+  if (page && page > 1) params.page = page;
+  return { path: '/portal/transformers', params };
+}
+
+async function fetchMeterList(page = 1, search = null) {
+  const { path, params } = buildMeterListUrl(page, search);
+  return portalGet(path, params);
+}
+
+async function fetchMeterDetail(meterId) {
+  const { path, params } = buildMeterDetailUrl(meterId);
+  return portalGet(path, params);
+}
+
+async function fetchTransformerList(page = 1) {
+  const { path, params } = buildTransformerListUrl(page);
+  return portalGet(path, params);
+}
+
+async function makeRequest(path, params, cookie) {
+  return axios.get(`${config.portal.baseUrl}${path}`, {
+    params,
+    timeout: config.portal.timeoutMs,
+    headers: { Cookie: cookie },
+    validateStatus: () => true,
+    responseType: 'text',
+  });
+}
+
+function portalUnavailableError(cause) {
+  return createOperationalError(
+    502,
+    'PORTAL_UNAVAILABLE',
+    `Portal unavailable: ${cause.message}`
+  );
+}
+
+function createOperationalError(statusCode, code, message) {
+  const err = new Error(message);
+  err.isOperational = true;
+  err.statusCode = statusCode;
+  err.code = code;
+  err.details = [];
+  return err;
+}
+
+module.exports = { fetchMeterList, fetchMeterDetail, fetchTransformerList };
