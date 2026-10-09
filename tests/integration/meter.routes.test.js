@@ -36,10 +36,6 @@ const ENERGY_JSON = {
   ],
 };
 
-// ---------------------------------------------------------------------------
-// GET /api/v1/meters
-// ---------------------------------------------------------------------------
-
 describe('GET /api/v1/meters', () => {
   beforeEach(() => {
     portalClient.fetchMeterList.mockResolvedValue(METER_LIST_JSON);
@@ -90,10 +86,6 @@ describe('GET /api/v1/meters', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// GET /api/v1/meters/:meterId
-// ---------------------------------------------------------------------------
-
 describe('GET /api/v1/meters/:meterId', () => {
   beforeEach(() => {
     portalClient.fetchMeterList.mockResolvedValue(METER_SEARCH_J100000_JSON);
@@ -124,10 +116,6 @@ describe('GET /api/v1/meters/:meterId', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// GET /api/v1/meters/:meterId/location
-// ---------------------------------------------------------------------------
-
 describe('GET /api/v1/meters/:meterId/location', () => {
   beforeEach(() => {
     portalClient.fetchMeterGeo.mockResolvedValue(GEO_JSON);
@@ -153,10 +141,6 @@ describe('GET /api/v1/meters/:meterId/location', () => {
     expect(res.status).toBe(502);
   });
 });
-
-// ---------------------------------------------------------------------------
-// GET /api/v1/meters/:meterId/consumption
-// ---------------------------------------------------------------------------
 
 describe('GET /api/v1/meters/:meterId/consumption', () => {
   beforeEach(() => {

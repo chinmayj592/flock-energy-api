@@ -40,7 +40,7 @@ async function getMeterLocation(meterId) {
   return parseMeterGeo(geoJson);
 }
 
-(meterId, limit = null) {
+async function getMeterConsumption(meterId, limit = null) {
   const energyJson = await fetchMeterEnergy(meterId);
   const readings = parseMeterEnergy(energyJson);
 

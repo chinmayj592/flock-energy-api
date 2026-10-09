@@ -1,13 +1,8 @@
 'use strict';
 
-// OBSERVED field names from portal JSON responses:
-//   meterId, serialNo, make, phaseType, installStatus, dtCode
-//   latitude (string), longitude (string)
-//   timestamp (string DD/MM/YYYY HH:mm), kwh (string), kvah (string), voltR (string)
-
 function parseMeterList(json) {
   const raw = json?.data;
-  if (!Array.isArray(raw)) return { meters: [], pagination: { currentPage: 1, totalPages: 1 } };
+  if (!Array.isArray(raw)) return { meters: [], pagination: { total: 0, page: 1, pageSize: 20 } };
 
   const meters = raw.map((m) => ({
     meterId: m.meterId || null,
@@ -52,7 +47,7 @@ function parseMeterEnergy(json) {
 
 function parseTransformerList(json) {
   const raw = json?.data;
-  if (!Array.isArray(raw)) return { transformers: [], pagination: { currentPage: 1, totalPages: 1 } };
+  if (!Array.isArray(raw)) return { transformers: [], pagination: { total: 0, page: 1, pageSize: 20 } };
 
   const transformers = raw.map((t) => ({
     transformerId: t.transformerId || t.dtCode || null,

@@ -40,25 +40,18 @@ async function portalGet(path, params = {}) {
   return response.data;
 }
 
-// OBSERVED: GET /portal/meters/search?q=&page=
-// Returns JSON: { data: [...], total, page, pageSize }
 async function fetchMeterList(page = 1, search = null) {
   return portalGet('/portal/meters/search', { q: search || '', page });
 }
 
-// OBSERVED: GET /portal/meters/:meterId/geo
-// Returns JSON: { data: { latitude: string, longitude: string } }
 async function fetchMeterGeo(meterId) {
   return portalGet(`/portal/meters/${meterId}/geo`);
 }
 
-// OBSERVED: GET /portal/meters/:meterId/energy
-// Returns JSON array of { timestamp, kwh, kvah, voltR } — all strings
 async function fetchMeterEnergy(meterId) {
   return portalGet(`/portal/meters/${meterId}/energy`);
 }
 
-// OBSERVED: transformer list at /portal/dts?page=1 (seen in DevTools as 'dts?page=1')
 async function fetchTransformerList(page = 1) {
   return portalGet('/portal/dts', { page });
 }

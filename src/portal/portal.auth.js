@@ -1,7 +1,6 @@
 'use strict';
 
 const axios = require('axios');
-
 const config = require('../config/env');
 
 const SESSION_COOKIE_NAME = '__Secure-better-auth.session_token';

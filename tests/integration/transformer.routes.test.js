@@ -27,10 +27,6 @@ const METER_LIST_FOR_DT001_JSON = {
   pageSize: 20,
 };
 
-// ---------------------------------------------------------------------------
-// GET /api/v1/transformers
-// ---------------------------------------------------------------------------
-
 describe('GET /api/v1/transformers', () => {
   beforeEach(() => {
     portalClient.fetchTransformerList.mockResolvedValue(TRANSFORMER_LIST_JSON);
@@ -78,10 +74,6 @@ describe('GET /api/v1/transformers', () => {
     expect(res.body.error.code).toBe('PORTAL_UNAVAILABLE');
   });
 });
-
-// ---------------------------------------------------------------------------
-// GET /api/v1/transformers/:transformerId/meters
-// ---------------------------------------------------------------------------
 
 describe('GET /api/v1/transformers/:transformerId/meters', () => {
   beforeEach(() => {

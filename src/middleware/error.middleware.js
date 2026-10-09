@@ -1,6 +1,6 @@
 'use strict';
 
-function errorMiddleware(err, req, res, next) { // eslint-disable-line no-unused-vars
+function errorMiddleware(err, req, res, next) {
   if (err.isOperational) {
     return res.status(err.statusCode).json({
       error: {

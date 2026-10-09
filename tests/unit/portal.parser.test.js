@@ -7,10 +7,6 @@ const {
   parseTransformerList,
 } = require('../../src/portal/portal.parser');
 
-// ---------------------------------------------------------------------------
-// parseMeterList
-// ---------------------------------------------------------------------------
-
 describe('parseMeterList', () => {
   const json = {
     data: [
@@ -35,7 +31,7 @@ describe('parseMeterList', () => {
     });
   });
 
-  it('calculates totalPages from total and pageSize', () => {
+  it('returns pagination fields from portal response', () => {
     const { pagination } = parseMeterList(json);
     expect(pagination.page).toBe(1);
     expect(pagination.total).toBe(40);
@@ -52,10 +48,6 @@ describe('parseMeterList', () => {
     expect(meters).toHaveLength(0);
   });
 });
-
-// ---------------------------------------------------------------------------
-// parseMeterGeo
-// ---------------------------------------------------------------------------
 
 describe('parseMeterGeo', () => {
   it('converts string coordinates to numbers', () => {
@@ -80,10 +72,6 @@ describe('parseMeterGeo', () => {
     expect(geo.longitude).toBeNull();
   });
 });
-
-// ---------------------------------------------------------------------------
-// parseMeterEnergy
-// ---------------------------------------------------------------------------
 
 describe('parseMeterEnergy', () => {
   const json = {
@@ -125,10 +113,6 @@ describe('parseMeterEnergy', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// parseTransformerList
-// ---------------------------------------------------------------------------
-
 describe('parseTransformerList', () => {
   const json = {
     data: [
@@ -161,7 +145,7 @@ describe('parseTransformerList', () => {
     expect(transformers).toHaveLength(0);
   });
 
-  it('calculates totalPages correctly', () => {
+  it('returns pagination fields from portal response', () => {
     const { pagination } = parseTransformerList(json);
     expect(pagination.page).toBe(1);
     expect(pagination.total).toBe(2);
